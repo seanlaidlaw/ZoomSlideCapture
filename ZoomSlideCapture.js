@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         Zoom Slide Recorder
-// @namespace    https://sanger.zoom.us
+// @namespace    https://seanlaidlaw.com
 // @version      0.1
 // @description  Script to capture Screen Share as PNG data every 1s
 // @author       Sean Laidlaw
@@ -12,8 +12,16 @@
 // ==/UserScript==
 
 var images = []
+var imagesHashes = []
 var intervals = [];
 var isCapturing = false
+
+// add the pHash library to page as a <script> tag to <head>
+var scr = document.createElement('script');
+scr.type = "text/javascript";
+scr.src = "https://cdn.jsdelivr.net/npm/phash-js/dist/phash.js";
+document.getElementsByTagName('head')[0].appendChild(scr)
+
 
 function toggleCapture() {
 	// this is the canvas that Zoom uses to display the screen share
@@ -44,11 +52,34 @@ function toggleCapture() {
 		isCapturing = true
 		const interval = setInterval(function () {
 			// capture state of canvas and append it to the images array
-			let capture = screen_share.toDataURL('image/png', 1.0);
-			if (!(images.includes(capture))) {
-				images.push(capture)
-				console.log(images.length)
-			}
+			var capture = screen_share.toDataURL('image/png', 1.0);
+			var file = dataURLtoFile(capture, 'file.png');
+
+			pHash.hash(file).then(hash => {
+				current_hash = hash.toBinary()
+				console.log(current_hash)
+
+				if (imagesHashes.length > 0) {
+					previousHash = imagesHashes[imagesHashes.length - 1]
+					console.log("previous hash: " + previousHash)
+
+					similarity = calculateSimilarity(current_hash, previousHash)
+					console.log(similarity)
+
+					if (similarity < 85) {
+						imagesHashes.push(current_hash);
+						images.push(capture);
+						console.log("added capture")
+					}
+				} else {
+					imagesHashes.push(current_hash);
+					images.push(capture);
+					console.log("added capture")
+				}
+
+
+			})
+
 		}, 2000);
 		intervals.push(interval);
 		document.getElementById('startCaptureBtn').innerText = "Capturing..."
@@ -65,6 +96,28 @@ function downloadFile(filePath) {
 	link.click();
 }
 
+function dataURLtoFile(dataurl, filename) {
+	var arr = dataurl.split(','),
+		mime = arr[0].match(/:(.*?);/)[1],
+		bstr = atob(arr[1]),
+		n = bstr.length,
+		u8arr = new Uint8Array(n);
+
+	while (n--) {
+		u8arr[n] = bstr.charCodeAt(n);
+	}
+
+	return new File([u8arr], filename, {type: mime});
+}
+
+function calculateSimilarity(hash1, hash2) {
+	let similarity = 0;
+	hash1Array = hash1.split("");
+	hash1Array.forEach((bit, index) => {
+		hash2[index] === bit ? similarity++ : null;
+	});
+	return parseInt((similarity / hash1.length) * 100);
+}
 
 (function () {
 	// this uses a manual 5000ms timer before running this code, due to the webpage dynamically loading.
@@ -85,4 +138,3 @@ function downloadFile(filePath) {
 
 	}, 5000); // 5 seconds will elapse and Code will execute.
 })();
-
